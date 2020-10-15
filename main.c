@@ -6,7 +6,7 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2020/10/13 15:48:02 by dnakano           #+#    #+#             */
-/*   Updated: 2020/10/15 17:20:49 by dnakano          ###   ########.fr       */
+/*   Updated: 2020/10/15 17:48:05 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -81,10 +81,12 @@ void			store_ifloat_mts(t_float *ifloat)
 	int8_t		mts[FLT_MTSSIZE];
 
 	bzero(ifloat->mts_dec, sizeof(ifloat->mts_dec));
-	if (ifloat->exp >= 23 || ifloat->exp == -127 || !ifloat->frac)
+	if (ifloat->exp >= 23 || (!ifloat->frac && ifloat->exp == -127)) // || ifloat->exp == -127)
 		return ;
 	if (ifloat->exp > 0)
 		mts_bin = ifloat->frac << ifloat->exp;
+	else if (ifloat->exp == -127)
+		mts_bin = ifloat->frac >> 0;
 	else
 		mts_bin = (ifloat->frac >> 1) | (1 << 31);
 	bzero(mts, sizeof(mts));
@@ -120,7 +122,7 @@ void			itg_dbl(int8_t *itg, int size)
 		}
 		i--;
 	}
-	i = 0;
+	// i = 0;
 	// while (i < size)
 	// 	printf("%d", itg[i++]);
 	// printf("\n");
@@ -148,7 +150,7 @@ void			store_ifloat_int(t_float *ifloat)
 		itg_dbl(itg, FLT_INTSIZE);
 		i++;
 	}
-	while (i < ifloat->exp + 1)
+	while (i < (int)ifloat->exp + 1)
 	{
 		itg_dbl(ifloat->int_dec, FLT_INTSIZE);
 		i++;
@@ -226,6 +228,18 @@ int		main(void)
 	num = __FLT_MIN__;
 	ifloat = store_ifloat(num);
 	print_ifloat(num, ifloat);
+
+	num = 1.0e-38F;
+	ifloat = store_ifloat(num);
+	print_ifloat(num, ifloat);
+
+	num = 1.0e-40F;
+	ifloat = store_ifloat(num);
+	print_ifloat(num, ifloat);
+
+	// num = 0.0F;
+	// ifloat = store_ifloat(num);
+	// print_ifloat(num, ifloat);
 
 	// num = 1e4;
 	// ifloat = store_ifloat(num);
