@@ -6,7 +6,7 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2020/10/13 15:48:02 by dnakano           #+#    #+#             */
-/*   Updated: 2020/10/15 16:20:56 by dnakano          ###   ########.fr       */
+/*   Updated: 2020/10/15 17:20:49 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -77,11 +77,16 @@ void			mts_leftshift(int8_t *mts, int size)
 void			store_ifloat_mts(t_float *ifloat)
 {
 	int			i;
+	u_int32_t	mts_bin;
 	int8_t		mts[FLT_MTSSIZE];
 
 	bzero(ifloat->mts_dec, sizeof(ifloat->mts_dec));
-	if (!ifloat->mts_bin)
+	if (ifloat->exp >= 23 || ifloat->exp == -127 || !ifloat->frac)
 		return ;
+	if (ifloat->exp > 0)
+		mts_bin = ifloat->frac << ifloat->exp;
+	else
+		mts_bin = (ifloat->frac >> 1) | (1 << 31);
 	bzero(mts, sizeof(mts));
 	mts[0] = 5;
 	i = 0;
@@ -93,7 +98,7 @@ void			store_ifloat_mts(t_float *ifloat)
 	i = 0;
 	while (i < 24)
 	{
-		if (ifloat->mts_bin & (1 << (31 - i)))
+		if (mts_bin & (1 << (31 - i)))
 			arr_add(ifloat->mts_dec, mts, FLT_MTSSIZE);
 		mts_divbytwo(mts, FLT_MTSSIZE);
 		i++;
@@ -124,17 +129,21 @@ void			itg_dbl(int8_t *itg, int size)
 void			store_ifloat_int(t_float *ifloat)
 {
 	int			i;
+	u_int32_t	itg_bin;
+	int			offset;
 	int8_t		itg[FLT_INTSIZE];
 
 	bzero(ifloat->int_dec, sizeof(ifloat->int_dec));
-	if (!ifloat->int_bin)
+	if (ifloat->exp < 0 || !ifloat->frac)
 		return ;
+	offset = (ifloat->exp >= 23) ? 23 : ifloat->exp;
+	itg_bin = (ifloat->frac >> (32 - offset)) | (1 << offset);
 	bzero(itg, sizeof(itg));
 	itg[FLT_INTSIZE - 1] = 1;
 	i = 0;
 	while (i < 24)
 	{
-		if (ifloat->int_bin & (1 << i))
+		if (itg_bin & (1 << i))
 			arr_add(ifloat->int_dec, itg, FLT_INTSIZE);
 		itg_dbl(itg, FLT_INTSIZE);
 		i++;
@@ -179,6 +188,7 @@ static void print_ifloat(float num, t_float ifloat)
 	printf("num = %.150f\n", num);
 	printf("sign = %hhu\n", ifloat.sign);
 	printf("exp = %hhd\n", ifloat.exp);
+	printf("frac = %u\n", ifloat.frac);
 	printf("int_bin = %u\n", ifloat.int_bin);
 	printf("mts_bin = %u\n", ifloat.mts_bin);
 	printf("int_dec = ");
@@ -205,61 +215,69 @@ int		main(void)
 	ifloat = store_ifloat(num);
 	print_ifloat(num, ifloat);
 
+	num = 1e-4;
+	ifloat = store_ifloat(num);
+	print_ifloat(num, ifloat);
+
+	num = 3.1154944e-38F;
+	ifloat = store_ifloat(num);
+	print_ifloat(num, ifloat);
+
 	num = __FLT_MIN__;
 	ifloat = store_ifloat(num);
 	print_ifloat(num, ifloat);
 
-	num = 1e4;
-	ifloat = store_ifloat(num);
-	print_ifloat(num, ifloat);
+	// num = 1e4;
+	// ifloat = store_ifloat(num);
+	// print_ifloat(num, ifloat);
 
-	num = 1.11111e7;
-	ifloat = store_ifloat(num);
-	print_ifloat(num, ifloat);
+	// num = 1.11111e7;
+	// ifloat = store_ifloat(num);
+	// print_ifloat(num, ifloat);
 
-	num = 2.11111e7;
-	ifloat = store_ifloat(num);
-	print_ifloat(num, ifloat);
+	// num = 2.11111e7;
+	// ifloat = store_ifloat(num);
+	// print_ifloat(num, ifloat);
 
-	num = 4.11111e7;
-	ifloat = store_ifloat(num);
-	print_ifloat(num, ifloat);
+	// num = 4.11111e7;
+	// ifloat = store_ifloat(num);
+	// print_ifloat(num, ifloat);
 
-	num = 8.11111e7;
-	ifloat = store_ifloat(num);
-	print_ifloat(num, ifloat);
+	// num = 8.11111e7;
+	// ifloat = store_ifloat(num);
+	// print_ifloat(num, ifloat);
 
-	num = 3.1415926535e7;
-	ifloat = store_ifloat(num);
-	print_ifloat(num, ifloat);
+	// num = 3.1415926535e7;
+	// ifloat = store_ifloat(num);
+	// print_ifloat(num, ifloat);
 
-	num = 12.1415926535e7;
-	ifloat = store_ifloat(num);
-	print_ifloat(num, ifloat);
+	// num = 12.1415926535e7;
+	// ifloat = store_ifloat(num);
+	// print_ifloat(num, ifloat);
 
-	num = 3.1415926535e8;
-	ifloat = store_ifloat(num);
-	print_ifloat(num, ifloat);
+	// num = 3.1415926535e8;
+	// ifloat = store_ifloat(num);
+	// print_ifloat(num, ifloat);
 
-	num = 3.1415926535e9;
-	ifloat = store_ifloat(num);
-	print_ifloat(num, ifloat);
+	// num = 3.1415926535e9;
+	// ifloat = store_ifloat(num);
+	// print_ifloat(num, ifloat);
 
-	num = 6.1415926535e9;
-	ifloat = store_ifloat(num);
-	print_ifloat(num, ifloat);
+	// num = 6.1415926535e9;
+	// ifloat = store_ifloat(num);
+	// print_ifloat(num, ifloat);
 
-	num = 3.1415926535e10;
-	ifloat = store_ifloat(num);
-	print_ifloat(num, ifloat);
+	// num = 3.1415926535e10;
+	// ifloat = store_ifloat(num);
+	// print_ifloat(num, ifloat);
 
-	num = __FLT_MAX__;
-	ifloat = store_ifloat(num);
-	print_ifloat(num, ifloat);
+	// num = __FLT_MAX__;
+	// ifloat = store_ifloat(num);
+	// print_ifloat(num, ifloat);
 
-	num = 0.0F;
-	ifloat = store_ifloat(num);
-	print_ifloat(num, ifloat);
+	// num = 0;
+	// ifloat = store_ifloat(num);
+	// print_ifloat(num, ifloat);
 
 	return (0);
 }
