@@ -6,7 +6,7 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2020/10/13 15:48:02 by dnakano           #+#    #+#             */
-/*   Updated: 2020/10/15 11:43:49 by dnakano          ###   ########.fr       */
+/*   Updated: 2020/10/15 16:20:56 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,6 +16,7 @@
 #include <limits.h>
 
 #define FLT_MTSSIZE 151	// 最小指数126 + 仮数部24bit(ケチ含) + 計算用余裕1
+#define FLT_INTSIZE 39	// 最大桁数
 
 typedef unsigned char 	t_uchar;
 
@@ -23,8 +24,10 @@ typedef struct	s_float
 {
 	u_int8_t	sign;
 	int8_t		exp;
-	u_int32_t	num_int;
-	u_int32_t	num_mts;
+	u_int32_t	frac;
+	u_int32_t	int_bin;
+	u_int32_t	mts_bin;
+	int8_t		int_dec[FLT_INTSIZE];
 	int8_t		mts_dec[FLT_MTSSIZE];
 }				t_float;
 
@@ -39,26 +42,12 @@ void			mts_divbytwo(int8_t *mts, int size)
 		mts[i] /= 2;
 		i++;
 	}
-	i = 0;
-	while (i < FLT_MTSSIZE)
-		printf("%d", mts[i++]);
-	printf("\n");
 }
 
-void			mts_add(int8_t *a, int8_t *b, int size)
+void			arr_add(int8_t *a, int8_t *b, int size)
 {
 	int		i;
 
-	i = 0;
-	// printf("a = ");
-	// while (i < 50)
-	// 	printf("%d", a[i++]);
-	// printf("\n");
-	i = 0;
-	// printf("b = ");
-	// while (i < FLT_MTSSIZE)
-	// 	printf("%d", b[i++]);
-	// printf("\n");
 	i = size - 1;
 	while (i >= 0)
 	{
@@ -70,11 +59,6 @@ void			mts_add(int8_t *a, int8_t *b, int size)
 		}
 		i--;
 	}
-	// i = 0;
-	// printf("a = ");
-	// while (i < 50)
-	// 	printf("%d", a[i++]);
-	// printf("\n");
 }
 
 void			mts_leftshift(int8_t *mts, int size)
@@ -95,8 +79,10 @@ void			store_ifloat_mts(t_float *ifloat)
 	int			i;
 	int8_t		mts[FLT_MTSSIZE];
 
-	bzero(mts, sizeof(mts));
 	bzero(ifloat->mts_dec, sizeof(ifloat->mts_dec));
+	if (!ifloat->mts_bin)
+		return ;
+	bzero(mts, sizeof(mts));
 	mts[0] = 5;
 	i = 0;
 	while (i < -ifloat->exp - 1)
@@ -107,42 +93,82 @@ void			store_ifloat_mts(t_float *ifloat)
 	i = 0;
 	while (i < 24)
 	{
-		if (ifloat->num_mts & (1 << (31 - i)))
-			mts_add(ifloat->mts_dec, mts, FLT_MTSSIZE);
+		if (ifloat->mts_bin & (1 << (31 - i)))
+			arr_add(ifloat->mts_dec, mts, FLT_MTSSIZE);
 		mts_divbytwo(mts, FLT_MTSSIZE);
+		i++;
+	}
+}
+
+void			itg_dbl(int8_t *itg, int size)
+{
+	int		i;
+
+	i = size - 1;
+	while(i >= 0)
+	{
+		itg[i] *= 2;
+		if (i < size - 1 && itg[i + 1] >= 10)
+		{
+			itg[i] += 1;
+			itg[i + 1] -= 10;
+		}
+		i--;
+	}
+	i = 0;
+	// while (i < size)
+	// 	printf("%d", itg[i++]);
+	// printf("\n");
+}
+
+void			store_ifloat_int(t_float *ifloat)
+{
+	int			i;
+	int8_t		itg[FLT_INTSIZE];
+
+	bzero(ifloat->int_dec, sizeof(ifloat->int_dec));
+	if (!ifloat->int_bin)
+		return ;
+	bzero(itg, sizeof(itg));
+	itg[FLT_INTSIZE - 1] = 1;
+	i = 0;
+	while (i < 24)
+	{
+		if (ifloat->int_bin & (1 << i))
+			arr_add(ifloat->int_dec, itg, FLT_INTSIZE);
+		itg_dbl(itg, FLT_INTSIZE);
+		i++;
+	}
+	while (i < ifloat->exp + 1)
+	{
+		itg_dbl(ifloat->int_dec, FLT_INTSIZE);
 		i++;
 	}
 }
 
 t_float	store_ifloat(float num)
 {
-	int					i;
 	int			offset;
 	u_int32_t	mem;
-	u_int32_t	frac;
 	t_float		ifloat;
 
 	memcpy(&mem, &num, 4);
 	ifloat.sign = mem >> 31;
 	ifloat.exp = (mem >> 23) - 127;
-	frac = mem << 9;
-	if (ifloat.exp > 23)
-		offset = 23;
-	else if (ifloat.exp < 0)
-		offset = 0;
-	offset = ifloat.exp;
+	ifloat.frac = mem << 9;
+	offset = (ifloat.exp >= 23) ? 23 : ifloat.exp;
 	if (offset >= 0)
 	{
-		ifloat.num_int = (frac >> (32 - offset)) | (1 << offset);
-		ifloat.num_mts = frac << offset;
+		ifloat.int_bin = (ifloat.frac >> (32 - offset)) | (1 << offset);
+		ifloat.mts_bin = ifloat.frac << offset;
 	}
 	else
 	{
-		ifloat.num_int = 0;
-		ifloat.num_mts = (frac >> 1) | (1 << 31);
+		ifloat.int_bin = 0;
+		ifloat.mts_bin = (ifloat.frac >> 1) | (1 << 31);
 	}
+	store_ifloat_int(&ifloat);
 	store_ifloat_mts(&ifloat);
-	i = 0;
 	return (ifloat);
 }
 
@@ -153,9 +179,13 @@ static void print_ifloat(float num, t_float ifloat)
 	printf("num = %.150f\n", num);
 	printf("sign = %hhu\n", ifloat.sign);
 	printf("exp = %hhd\n", ifloat.exp);
-	printf("num_int = %u\n", ifloat.num_int);
-	printf("num_mts = %u\n", ifloat.num_mts);
-	printf("mts_dec = ");
+	printf("int_bin = %u\n", ifloat.int_bin);
+	printf("mts_bin = %u\n", ifloat.mts_bin);
+	printf("int_dec = ");
+	i = 0;
+	while (i < FLT_INTSIZE)
+		printf("%d", ifloat.int_dec[i++]);
+	printf("\nmts_dec = ");
 	i = 0;
 	while (i < FLT_MTSSIZE - 1)
 		printf("%d", ifloat.mts_dec[i++]);
@@ -167,29 +197,69 @@ int		main(void)
 	float		num;
 	t_float		ifloat;
 
-	// num = 110.625;
-	// ifloat = store_ifloat(num);
-	// print_ifloat(num, ifloat);
+	num = 110.625;
+	ifloat = store_ifloat(num);
+	print_ifloat(num, ifloat);
 
-	// num = 3.1415926535;
-	// ifloat = store_ifloat(num);
-	// print_ifloat(num, ifloat);
-
-	// num = 0.00031415926535;
-	// ifloat = store_ifloat(num);
-	// print_ifloat(num, ifloat);
+	num = 3.1415926535;
+	ifloat = store_ifloat(num);
+	print_ifloat(num, ifloat);
 
 	num = __FLT_MIN__;
 	ifloat = store_ifloat(num);
 	print_ifloat(num, ifloat);
 
-	num =2.3509885615147286e-38;
+	num = 1e4;
 	ifloat = store_ifloat(num);
 	print_ifloat(num, ifloat);
 
-	// num = __FLT_MAX__;
-	// ifloat = store_ifloat(num);
-	// print_ifloat(num, ifloat);
+	num = 1.11111e7;
+	ifloat = store_ifloat(num);
+	print_ifloat(num, ifloat);
+
+	num = 2.11111e7;
+	ifloat = store_ifloat(num);
+	print_ifloat(num, ifloat);
+
+	num = 4.11111e7;
+	ifloat = store_ifloat(num);
+	print_ifloat(num, ifloat);
+
+	num = 8.11111e7;
+	ifloat = store_ifloat(num);
+	print_ifloat(num, ifloat);
+
+	num = 3.1415926535e7;
+	ifloat = store_ifloat(num);
+	print_ifloat(num, ifloat);
+
+	num = 12.1415926535e7;
+	ifloat = store_ifloat(num);
+	print_ifloat(num, ifloat);
+
+	num = 3.1415926535e8;
+	ifloat = store_ifloat(num);
+	print_ifloat(num, ifloat);
+
+	num = 3.1415926535e9;
+	ifloat = store_ifloat(num);
+	print_ifloat(num, ifloat);
+
+	num = 6.1415926535e9;
+	ifloat = store_ifloat(num);
+	print_ifloat(num, ifloat);
+
+	num = 3.1415926535e10;
+	ifloat = store_ifloat(num);
+	print_ifloat(num, ifloat);
+
+	num = __FLT_MAX__;
+	ifloat = store_ifloat(num);
+	print_ifloat(num, ifloat);
+
+	num = 0.0F;
+	ifloat = store_ifloat(num);
+	print_ifloat(num, ifloat);
 
 	return (0);
 }
