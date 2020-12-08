@@ -6,292 +6,217 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2020/10/13 15:48:02 by dnakano           #+#    #+#             */
-/*   Updated: 2020/10/15 17:48:05 by dnakano          ###   ########.fr       */
+/*   Updated: 2020/12/07 11:15:53 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include <string.h>
-#include <math.h>
 #include <stdio.h>
-#include <limits.h>
+#include <math.h>
+#include <unistd.h>
+#include <float.h>
+#include <stdint.h>
 
-#define FLT_MTSSIZE 151	// 最小指数126 + 仮数部24bit(ケチ含) + 計算用余裕1
-#define FLT_INTSIZE 39	// 最大桁数
+#define FLT_FRACSIZE 150	// 10進数での小数部の最大桁数149 + 計算用余裕1
+#define FLT_INTSIZE 39		// 10進数での最大桁数 39
 
-typedef unsigned char 	t_uchar;
-
-typedef struct	s_float
+struct          s_ifloat
 {
-	u_int8_t	sign;
-	int8_t		exp;
-	u_int32_t	frac;
-	u_int32_t	int_bin;
-	u_int32_t	mts_bin;
-	int8_t		int_dec[FLT_INTSIZE];
-	int8_t		mts_dec[FLT_MTSSIZE];
-}				t_float;
+    uint8_t     sign;       // 符号1bitを収納
+    uint8_t     exp;        // 指数部8bitを収納
+    uint32_t    frac;       // 仮数部23bitを収納
+    int8_t      intpart[FLT_INTSIZE];   // 10進数での整数部を保存
+    int8_t      fracpart[FLT_FRACSIZE]; // 10進数での小数部を保存
+};
 
-void			mts_divbytwo(int8_t *mts, int size)
+void            array_add(int8_t *a, int8_t *b, int size)
 {
-	int		i;
+    int		i;
 
-	i = 0;
-	while (i < size - 1)
-	{
-		mts[i + 1] += (mts[i] % 2) * 10;
-		mts[i] /= 2;
-		i++;
-	}
+    i = size - 1;
+    while (i >= 0)
+    {
+        a[i] += b[i];
+        if (a[i] >= 10 && i != 0)
+        {
+            a[i] -= 10;
+            a[i - 1] += 1;
+        }
+        i--;
+    }
 }
 
-void			arr_add(int8_t *a, int8_t *b, int size)
+void            array_divbytwo(int8_t *n, int size)
 {
-	int		i;
+    int		i;
 
-	i = size - 1;
-	while (i >= 0)
-	{
-		a[i] += b[i];
-		if (a[i] >= 10 && i != 0)
-		{
-			a[i] -= 10;
-			a[i - 1] += 1;
-		}
-		i--;
-	}
+    i = 0;
+    while (i < size - 1)
+    {
+        n[i + 1] += (n[i] % 2) * 10;
+        n[i] /= 2;
+        i++;
+    }
 }
 
-void			mts_leftshift(int8_t *mts, int size)
+void            array_double(int8_t *n, int size)
 {
-	int		i;
+    int		i;
 
-	i = 0;
-	while (i < size - 1)
-	{
-		mts[i] = mts[i + 1];
-		i++;
-	}
-	mts[size - 1] = 0;
+    i = size - 1;
+    while(i >= 0)
+    {
+        n[i] *= 2;
+        if (i < size - 1 && n[i + 1] >= 10)
+        {
+            n[i] += 1;
+            n[i + 1] -= 10;
+        }
+        i--;
+    }
 }
 
-void			store_ifloat_mts(t_float *ifloat)
+struct s_ifloat	store_ifloat(float num)
 {
-	int			i;
-	u_int32_t	mts_bin;
-	int8_t		mts[FLT_MTSSIZE];
+    struct s_ifloat	ifloat;
+    uint32_t        mem;
 
-	bzero(ifloat->mts_dec, sizeof(ifloat->mts_dec));
-	if (ifloat->exp >= 23 || (!ifloat->frac && ifloat->exp == -127)) // || ifloat->exp == -127)
-		return ;
-	if (ifloat->exp > 0)
-		mts_bin = ifloat->frac << ifloat->exp;
-	else if (ifloat->exp == -127)
-		mts_bin = ifloat->frac >> 0;
-	else
-		mts_bin = (ifloat->frac >> 1) | (1 << 31);
-	bzero(mts, sizeof(mts));
-	mts[0] = 5;
-	i = 0;
-	while (i < -ifloat->exp - 1)
-	{
-		mts_divbytwo(mts, FLT_MTSSIZE);
-		i++;
-	}
-	i = 0;
-	while (i < 24)
-	{
-		if (mts_bin & (1 << (31 - i)))
-			arr_add(ifloat->mts_dec, mts, FLT_MTSSIZE);
-		mts_divbytwo(mts, FLT_MTSSIZE);
-		i++;
-	}
+    memcpy(&mem, &num, sizeof(uint32_t));
+    ifloat.sign = mem >> 31;
+    ifloat.exp = mem >> 23;
+    ifloat.frac = mem << 9;
+    return (ifloat);
 }
 
-void			itg_dbl(int8_t *itg, int size)
+void			print_ifloat(struct s_ifloat ifloat)
 {
-	int		i;
+    int     i;
+    char    c;
 
-	i = size - 1;
-	while(i >= 0)
-	{
-		itg[i] *= 2;
-		if (i < size - 1 && itg[i + 1] >= 10)
-		{
-			itg[i] += 1;
-			itg[i + 1] -= 10;
-		}
-		i--;
-	}
-	// i = 0;
-	// while (i < size)
-	// 	printf("%d", itg[i++]);
-	// printf("\n");
+    if (ifloat.exp == 255 && ifloat.frac != 0)  // nanの場合
+    {
+        write(1, "nan", 3);
+        return ;
+    }
+    if (ifloat.sign == 1)                       // 符号ビットが1の場合'-'を出力
+        write(1, "-", 1);
+    if (ifloat.exp == 255)                      // infの場合
+    {
+        write(1, "inf", 3);
+        return ;
+    }
+    for (i = 0; i < FLT_INTSIZE; i++)           // 整数部の出力
+    {
+        c = ifloat.intpart[i] + '0';
+        write(1, &c, 1);
+    }
+    write(1, ".", 1);
+    for (i = 0; i < FLT_FRACSIZE - 1; i++)      // 小数部の出力
+    {
+        c = ifloat.fracpart[i] + '0';
+        write(1, &c, 1);
+    }
 }
 
-void			store_ifloat_int(t_float *ifloat)
+void			convert_fracpart(struct s_ifloat *ifloat)
 {
-	int			i;
-	u_int32_t	itg_bin;
-	int			offset;
-	int8_t		itg[FLT_INTSIZE];
+    int8_t      i;                  // カウンタ
+    uint32_t    fracpart_bin;       // fracの整数部分を格納
+    int8_t      n[FLT_FRACSIZE];    // 2^(i-1)を格納
 
-	bzero(ifloat->int_dec, sizeof(ifloat->int_dec));
-	if (ifloat->exp < 0 || !ifloat->frac)
-		return ;
-	offset = (ifloat->exp >= 23) ? 23 : ifloat->exp;
-	itg_bin = (ifloat->frac >> (32 - offset)) | (1 << offset);
-	bzero(itg, sizeof(itg));
-	itg[FLT_INTSIZE - 1] = 1;
-	i = 0;
-	while (i < 24)
-	{
-		if (itg_bin & (1 << i))
-			arr_add(ifloat->int_dec, itg, FLT_INTSIZE);
-		itg_dbl(itg, FLT_INTSIZE);
-		i++;
-	}
-	while (i < (int)ifloat->exp + 1)
-	{
-		itg_dbl(ifloat->int_dec, FLT_INTSIZE);
-		i++;
-	}
+    bzero(ifloat->fracpart, sizeof(ifloat->fracpart));
+    if (ifloat->exp >= 23 + 127 || (ifloat->exp == 0 && ifloat->frac == 0)) // 小数部0の場合
+        return ;
+    else if (ifloat->exp >= 127)    // 一部のみ小数部の場合
+        fracpart_bin = ifloat->frac << (ifloat->exp - 127);
+    else if (ifloat->exp == 0)      // 非正規数（ケチ表現分bitなし）
+        fracpart_bin = ifloat->frac;
+    else                            // 全て小数部かつ正規数（ケチ表現分bitを入れる）
+        fracpart_bin = ifloat->frac >> 1 | (1 << 31);
+    bzero(n, sizeof(n));
+    n[0] = 5;                       // 2^(-1)(=0.5)からスタート
+    for (i = 0; i < (126 - ifloat->exp); i++)
+        array_divbytwo(n, FLT_FRACSIZE);    // あらかじめ指数に合わせて割っておく
+    for (i = 0; i < 24; i++)
+    {
+        if (fracpart_bin & (1 << (31 - i))) // bitが立っていればfracpartに足していく
+            array_add(ifloat->fracpart, n, FLT_FRACSIZE);
+        array_divbytwo(n, FLT_FRACSIZE);
+    }
 }
 
-t_float	store_ifloat(float num)
+void            convert_intpart(struct s_ifloat *ifloat)
 {
-	int			offset;
-	u_int32_t	mem;
-	t_float		ifloat;
+    uint8_t     i;                  // カウンタ
+    int         offset;             // fracの整数部分までのoffset
+    uint32_t    intpart_bin;        // fracの整数部分を格納
+    int8_t      n[FLT_INTSIZE];     // 2^i乗を格納
 
-	memcpy(&mem, &num, 4);
-	ifloat.sign = mem >> 31;
-	ifloat.exp = (mem >> 23) - 127;
-	ifloat.frac = mem << 9;
-	offset = (ifloat.exp >= 23) ? 23 : ifloat.exp;
-	if (offset >= 0)
-	{
-		ifloat.int_bin = (ifloat.frac >> (32 - offset)) | (1 << offset);
-		ifloat.mts_bin = ifloat.frac << offset;
-	}
-	else
-	{
-		ifloat.int_bin = 0;
-		ifloat.mts_bin = (ifloat.frac >> 1) | (1 << 31);
-	}
-	store_ifloat_int(&ifloat);
-	store_ifloat_mts(&ifloat);
-	return (ifloat);
+    bzero(ifloat->intpart, sizeof(ifloat->intpart));
+    if (ifloat->exp < 127 || ifloat->exp == 255) // 整数部は0
+        return ;
+    else if (ifloat->exp < 127 + 23) // ifloat->fracの一部が整数部
+        offset = ifloat->exp - 127;
+    else // ifloat->exp >= 127 + 23 => ifloat->fracの全てが整数部
+        offset = 23;
+    intpart_bin = (ifloat->frac >> (32 - offset)) | (1 << offset);
+    bzero(n, sizeof(n));
+    n[FLT_INTSIZE - 1] = 1;     // n=1からスタート(最も右を1の位とする)
+    for (i = 0; i < 24; i++)    // 0~24ビットを確認する
+    {
+        if (intpart_bin & (1 << i))     // bitが立っていれば2^n乗を足す
+            array_add(ifloat->intpart, n, FLT_INTSIZE);
+        array_double(n, FLT_INTSIZE);   // nを2倍して次へ
+    }
+    while (i++ <= ifloat->exp - 127)    // iがexpより小さければその分2倍していく
+        array_double(ifloat->intpart, FLT_INTSIZE);
 }
 
-static void print_ifloat(float num, t_float ifloat)
-{
-	int		i;
 
-	printf("num = %.150f\n", num);
-	printf("sign = %hhu\n", ifloat.sign);
-	printf("exp = %hhd\n", ifloat.exp);
-	printf("frac = %u\n", ifloat.frac);
-	printf("int_bin = %u\n", ifloat.int_bin);
-	printf("mts_bin = %u\n", ifloat.mts_bin);
-	printf("int_dec = ");
-	i = 0;
-	while (i < FLT_INTSIZE)
-		printf("%d", ifloat.int_dec[i++]);
-	printf("\nmts_dec = ");
-	i = 0;
-	while (i < FLT_MTSSIZE - 1)
-		printf("%d", ifloat.mts_dec[i++]);
-	printf("\n\n");
+void            convert_ifloat(struct s_ifloat *ifloat)
+{
+    convert_intpart(ifloat);        // 整数部の出力
+    convert_fracpart(ifloat);       // 小数部の出力
 }
 
-int		main(void)
+void            printfloat(float num)
 {
-	float		num;
-	t_float		ifloat;
+    struct s_ifloat ifloat;
 
-	num = 110.625;
-	ifloat = store_ifloat(num);
-	print_ifloat(num, ifloat);
+    ifloat = store_ifloat(num);     // 符号部、指数部、仮数部を別々の変数に取り出す
+    convert_ifloat(&ifloat);        // 2進数->10進数へ変換
+    print_ifloat(ifloat);           // 標準出力へ出力
+}
 
-	num = 3.1415926535;
-	ifloat = store_ifloat(num);
-	print_ifloat(num, ifloat);
+void            printcomp(float num)
+{
+    // printfの表示（nan, inf以外は整数部39ケタ、小数部149ケタ表示する）
+    if (isnan(num) || isinf(num))
+        printf("printf  : %f\n", num);
+    else
+        printf("printf  : %0*.*f\n", FLT_INTSIZE + FLT_FRACSIZE, FLT_FRACSIZE - 1, num);
+    // 自作printfloatの表示（nan, inf以外は整数部39ケタ、小数部149ケタ表示する）
+    write(1, "putfloat: ", 10);
+    printfloat(num);
+    write(1, "\n", 1);
+}
 
-	num = 1e-4;
-	ifloat = store_ifloat(num);
-	print_ifloat(num, ifloat);
+int             main(void)
+{
+    float	    num;
+    uint32_t    mem;
 
-	num = 3.1154944e-38F;
-	ifloat = store_ifloat(num);
-	print_ifloat(num, ifloat);
-
-	num = __FLT_MIN__;
-	ifloat = store_ifloat(num);
-	print_ifloat(num, ifloat);
-
-	num = 1.0e-38F;
-	ifloat = store_ifloat(num);
-	print_ifloat(num, ifloat);
-
-	num = 1.0e-40F;
-	ifloat = store_ifloat(num);
-	print_ifloat(num, ifloat);
-
-	// num = 0.0F;
-	// ifloat = store_ifloat(num);
-	// print_ifloat(num, ifloat);
-
-	// num = 1e4;
-	// ifloat = store_ifloat(num);
-	// print_ifloat(num, ifloat);
-
-	// num = 1.11111e7;
-	// ifloat = store_ifloat(num);
-	// print_ifloat(num, ifloat);
-
-	// num = 2.11111e7;
-	// ifloat = store_ifloat(num);
-	// print_ifloat(num, ifloat);
-
-	// num = 4.11111e7;
-	// ifloat = store_ifloat(num);
-	// print_ifloat(num, ifloat);
-
-	// num = 8.11111e7;
-	// ifloat = store_ifloat(num);
-	// print_ifloat(num, ifloat);
-
-	// num = 3.1415926535e7;
-	// ifloat = store_ifloat(num);
-	// print_ifloat(num, ifloat);
-
-	// num = 12.1415926535e7;
-	// ifloat = store_ifloat(num);
-	// print_ifloat(num, ifloat);
-
-	// num = 3.1415926535e8;
-	// ifloat = store_ifloat(num);
-	// print_ifloat(num, ifloat);
-
-	// num = 3.1415926535e9;
-	// ifloat = store_ifloat(num);
-	// print_ifloat(num, ifloat);
-
-	// num = 6.1415926535e9;
-	// ifloat = store_ifloat(num);
-	// print_ifloat(num, ifloat);
-
-	// num = 3.1415926535e10;
-	// ifloat = store_ifloat(num);
-	// print_ifloat(num, ifloat);
-
-	// num = __FLT_MAX__;
-	// ifloat = store_ifloat(num);
-	// print_ifloat(num, ifloat);
-
-	// num = 0;
-	// ifloat = store_ifloat(num);
-	// print_ifloat(num, ifloat);
-
-	return (0);
+    printcomp(42);
+    printcomp(4.2);
+    printcomp(0.0);
+    printcomp(M_PI);        // 円周率 (math.hで定義)
+    printcomp(FLT_MAX);     // 正規数の最大 = 3.40282347e+38F (float.hで定義)
+    printcomp(FLT_MIN);     // 正規数の最小= 1.17549435e-38F (float.hで定義)
+    mem = 1;
+    memcpy(&num, &mem, sizeof(uint32_t));
+    printcomp(num);         // 非正規数の最小 (仮数部の最下位bitのみ1)
+    printcomp(0.0/0.0);     // nan
+    printcomp(1.0/0.0);     // inf
+    printcomp(-1.0/0.0);    // -inf
+    return (0);
 }
