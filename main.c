@@ -6,11 +6,10 @@
 /*   By: dnakano <dnakano@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2020/10/13 15:48:02 by dnakano           #+#    #+#             */
-/*   Updated: 2020/12/07 11:15:53 by dnakano          ###   ########.fr       */
+/*   Updated: 2020/12/19 23:40:55 by dnakano          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include <string.h>
 #include <stdio.h>
 #include <math.h>
 #include <unistd.h>
@@ -159,7 +158,10 @@ void            convert_intpart(struct s_ifloat *ifloat)
         offset = ifloat->exp - 127;
     else // ifloat->exp >= 127 + 23 => ifloat->fracの全てが整数部
         offset = 23;
-    intpart_bin = (ifloat->frac >> (32 - offset)) | (1 << offset);
+    if (offset == 0)
+        intpart_bin = 1 << offset;
+    else
+        intpart_bin = (ifloat->frac >> (32 - offset)) | (1 << offset);
     bzero(n, sizeof(n));
     n[FLT_INTSIZE - 1] = 1;     // n=1からスタート(最も右を1の位とする)
     for (i = 0; i < 24; i++)    // 0~24ビットを確認する
@@ -171,7 +173,6 @@ void            convert_intpart(struct s_ifloat *ifloat)
     while (i++ <= ifloat->exp - 127)    // iがexpより小さければその分2倍していく
         array_double(ifloat->intpart, FLT_INTSIZE);
 }
-
 
 void            convert_ifloat(struct s_ifloat *ifloat)
 {
@@ -209,6 +210,7 @@ int             main(void)
     printcomp(42);
     printcomp(4.2);
     printcomp(0.0);
+    printcomp(1.1);
     printcomp(M_PI);        // 円周率 (math.hで定義)
     printcomp(FLT_MAX);     // 正規数の最大 = 3.40282347e+38F (float.hで定義)
     printcomp(FLT_MIN);     // 正規数の最小= 1.17549435e-38F (float.hで定義)
