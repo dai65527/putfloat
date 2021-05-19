@@ -196,6 +196,7 @@ void            printcomp(float num)
         printf("printf  : %f\n", num);
     else
         printf("printf  : %0*.*f\n", FLT_INTSIZE + FLT_FRACSIZE, FLT_FRACSIZE - 1, num);
+    fflush(stdout);
     // 自作printfloatの表示（nan, inf以外は整数部39ケタ、小数部149ケタ表示する）
     write(1, "putfloat: ", 10);
     printfloat(num);
